@@ -1,4 +1,4 @@
-# Taniwha
+# Taniwha Skills
 
 A discipline for AI-generated codebases. Imposes structure that holds as projects grow, with verifier-checked contracts and a re-raise loop that surfaces under-specification before code is written.
 
