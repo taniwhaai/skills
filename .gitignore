@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Editor scratch
+.vscode/
+.idea/
+*.swp
+*~
+
+# Python (bash scripts use python3 internally for ULID generation)
+__pycache__/
+*.pyc
+.venv/
+
+# Test/build artefacts that might appear during local validation
+.pytest_cache/
+node_modules/
+dist/
+build/

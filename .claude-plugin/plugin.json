@@ -1,0 +1,85 @@
+{
+  "name": "taniwha",
+  "version": "1.7.0",
+  "description": "Compartmentalised, agent-driven build system for AI-generated codebases. Imposes structure that holds as projects grow, with verifier-checked contracts and a re-raise loop that surfaces under-specification before code is written.",
+  "author": {
+    "name": "Taniwha"
+  },
+  "license": "MIT",
+  "skills": [
+    {
+      "name": "design-doc",
+      "path": "skills/design-doc",
+      "description": "Produce a structural design document from a brief, including the project's tier (single_module / small_multi_module / full_decomposition). Audits the brief for under-specification and surfaces every silent decision."
+    },
+    {
+      "name": "contract-derivation",
+      "path": "skills/contract-derivation",
+      "description": "Derive per-module contracts (manifests) and shared vocabulary from an approved design document. Manifests are language-neutral; sharing markers say which types must be canonical across modules."
+    },
+    {
+      "name": "leaf-implementation",
+      "path": "skills/leaf-implementation",
+      "description": "Implement one module from one manifest, working only from the manifest, vocabulary, and project context. Refuses scope expansion; re-raises when the manifest is under-specified."
+    },
+    {
+      "name": "composition",
+      "path": "skills/composition",
+      "description": "Wire two completed children under a parent contract. Mechanical contract-to-contract routing; produces the canonical shared-types package when children share types."
+    },
+    {
+      "name": "verifier",
+      "path": "skills/verifier",
+      "description": "Independently verify that an implementation or composition satisfies its contract's acceptance criteria. Reads the contract from scratch, writes its own tests, runs them, reports per-AC pass/fail."
+    },
+    {
+      "name": "orchestrator",
+      "path": "skills/orchestrator",
+      "description": "Ephemeral subagent that decides the single next action in a Taniwha build by reading filesystem state. Holds no memory between invocations; all state lives in .taniwha/."
+    },
+    {
+      "name": "dispatcher",
+      "path": "skills/dispatcher",
+      "description": "Main-session executor for a Taniwha build. Spawns subagents on the orchestrator's instructions; refuses to make build decisions itself."
+    }
+  ],
+  "agents": [
+    {
+      "name": "taniwha-orchestrator",
+      "path": "agents/taniwha-orchestrator.md"
+    },
+    {
+      "name": "taniwha-design-doc",
+      "path": "agents/taniwha-design-doc.md"
+    },
+    {
+      "name": "taniwha-contract-derivation",
+      "path": "agents/taniwha-contract-derivation.md"
+    },
+    {
+      "name": "taniwha-leaf-implementation",
+      "path": "agents/taniwha-leaf-implementation.md"
+    },
+    {
+      "name": "taniwha-composition",
+      "path": "agents/taniwha-composition.md"
+    },
+    {
+      "name": "taniwha-verifier",
+      "path": "agents/taniwha-verifier.md"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "homepage": "",
+  "keywords": [
+    "claude-code",
+    "agent",
+    "skills",
+    "software-architecture",
+    "code-generation",
+    "ai-tooling"
+  ]
+}
