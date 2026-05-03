@@ -55,46 +55,64 @@ Each subdirectory under `.taniwha/kupu/` is described in detail below. Every fil
 
 ## `.taniwha/project.yaml`
 
-The project's root manifest. One file, present from the moment the project is initialised. Records the project's identity, the design doc currently in force, and the system's high-level configuration.
+The project's root manifest. One file, present from the moment the project is initialised. Records the project's identity, the tooling versions in use, and the cross-tool coordination metadata that any Taniwha tool can read.
+
+**This is a cross-tool file** (lives at `.taniwha/`, not `.taniwha/kupu/`). Its schema is canonical: the dispatcher's bash-fallback bootstrap must produce exactly this shape, and Kupu's parser must accept exactly this shape. Drift between bash-written and Kupu-written project.yaml files is a coordination bug, not a quirk to handle. Both sides conform to the canonical schema below.
 
 ```yaml
-project:
-  id: <stable-slug, never changes>
-  name: <human-readable name>
-  created_at: <ISO 8601>
-  taniwha_version: <version of the layout spec this project conforms to>
-
-brief:
-  current_version: <integer>
-  path: brief/v<N>.md
-
-project_context:
-  path: project_context.yaml
-
-design_doc:
-  current_version: <integer>
-  path: design/v<N>.md
-
-vocabulary:
-  current_version: <integer>
-  path: vocabulary/v<N>.md
-
-configuration:
-  model_routing:
-    design-doc: <model id>
-    contract-derivation: <model id>
-    leaf-implementation: <model id>
-    composition: <model id>
-    orchestrator: <model id>
-    verifier: <model id>
-  human_gates:
-    - project_context_capture
-    - design_doc_approval
-    - root_re_raise_resolution
-    - completion_review
+schema_version: 1
+project_id: <ULID or stable slug>
+name: <human-readable name>
+created_at:
+  iso: <ISO 8601 with millisecond precision, ending in 'Z'>
+  filename: <YYYYMMDDTHHMMSSsssZ>
+tooling_versions:
+  kupu: "<semver>"           # absent if Kupu not installed
+  arai: "<semver>"           # absent if Arai not installed
+  taniwha_skills: "<semver>"  # always present; matches the skills suite version
+tools_registered:
+  - kupu          # entries here mirror tooling_versions keys
+  - taniwha_skills
+current_phase: <free-text phase descriptor, e.g. "kickoff", "building", "verifying", "phase-1-complete">
 ```
 
-This file is small and rarely changes. Its purpose is to give a returning agent the project's basic shape in one read.
+**Fields that are part of the canonical schema and MUST be present:**
+
+- `schema_version` (integer; currently `1`)
+- `project_id` (string; ULID or slug)
+- `name` (string)
+- `created_at` (Timestamp struct, see below)
+- `tooling_versions` (mapping of tool-name → semver string)
+- `tools_registered` (list of tool-name strings; should match `tooling_versions` keys)
+- `current_phase` (free-text string)
+
+**Optional convenience fields** (skills may include these for their own use; consumers MUST tolerate their absence):
+
+- `brief: { current_version, path }` — the skills' pointer to the brief
+- `project_context: { path }` — the skills' pointer to project context
+- `design_doc: { current_version, path, history: [...] }`
+- `vocabulary: { current_version, path }`
+- `configuration: { model_routing: {...}, human_gates: [...] }`
+
+These optional fields live alongside the canonical fields, not nested under a `project:` key. Putting any field under `project:` produces a file that Kupu's parser will reject; the bash-fallback bootstrap must use top-level fields to remain Kupu-readable.
+
+### Timestamp shape (used here and elsewhere)
+
+Every place a timestamp appears in a `.taniwha/` file — `created_at` here, `dispatched_at` and `returned_at` in handoff metadata, `timestamp` in event records, `created_at` in decision files — uses the same struct shape:
+
+```yaml
+<field_name>:
+  iso: "2026-05-03T01:08:02.000Z"
+  filename: "20260503T010802000Z"
+```
+
+NOT a bare ISO string. Both sub-fields describe the same instant to the millisecond. This is what Kupu's `kupu.now` produces and what its parsers expect; the bash-fallback `_shared/scripts/util/now.sh --both` produces both forms from a single clock read for the same purpose.
+
+### When to write project.yaml
+
+The dispatcher writes this file once at kickoff (with the canonical fields plus any optional fields the skills want to record). Subsequent updates happen when versioned artefacts advance — design doc v1 → v2, vocabulary v1 → v2, etc. — and the optional pointer fields update accordingly. The canonical fields rarely change after initial capture.
+
+This file is small and rarely changes. Its purpose is to give a returning agent the project's basic shape in one read, AND to give cross-tool coordination (e.g. Kupu reading what Taniwha skills wrote, or vice versa) a reliable common schema.
 
 ## `.taniwha/kupu/project_context.yaml`
 
@@ -106,17 +124,19 @@ project_context:
     name: <language name>           # e.g. python, go, typescript, rust
     version: <version constraint>   # e.g. ">=3.11", "1.24", "node 20"
   toolchain:
-    package_manager: <name>         # e.g. uv, go-modules, pnpm, cargo
-    formatter: <name or null>       # e.g. ruff, gofmt, prettier, rustfmt
-    linter: <name or null>          # e.g. ruff, golangci-lint, eslint, clippy
-    test_framework: <name>          # e.g. pytest, go-test, vitest, cargo-test
+    binary_path: <absolute path>    # detected at kickoff, may be null if not detected
+    version: <version string>       # detected at kickoff, may be null
+    commands:
+      test: <shell command string>      # e.g. "cargo test", "pytest", "go test ./..."
+      build: <shell command string>     # may be empty string for languages with no build step
+      format: <shell command string>    # e.g. "cargo fmt --all", "ruff format ."
+      lint: <shell command string>      # e.g. "cargo clippy", "ruff check ."
   repo_style:
     kind: monorepo | single_package | workspace
     module_layout: <path template>  # e.g. "internal/{module}", "src/{module}"
     test_layout: alongside_source | separate_tests_dir | <path template>
-  build:
-    primary_command: <shell command>  # e.g. "go build ./...", "uv build"
-    test_command: <shell command>     # e.g. "go test ./...", "uv run pytest"
+  shared_types:
+    package_path: <path>            # only present for multi-module tiers with shared sharing markers
   conventions:
     naming: <kebab|snake|camel>      # how module names map to filesystem names
     code_style_notes: |
@@ -125,12 +145,20 @@ project_context:
 
 provenance:
   authored_by: user
-  authored_at: <ISO 8601>
+  authored_at:
+    iso: <ISO 8601 with milliseconds, ending in Z>
+    filename: <YYYYMMDDTHHMMSSsssZ>
   amended:
-    - amended_at: <ISO 8601>
+    - amended_at:
+        iso: <...>
+        filename: <...>
       reason: <short>
       decision_ref: decisions/<id>.md
 ```
+
+The `toolchain.commands` block is the **single source of truth** for how to invoke language-specific tools in this project. Captured once at kickoff via user confirmation (with defaults from `_shared/registries/toolchain-defaults.yaml`), reused for the lifetime of the build. Every dispatch — verifier, leaf, composition — reads commands by name from here. No skill should re-derive language-specific commands; doing so is a discipline gap to surface as a finding.
+
+If a command field is empty string (for languages without a conventional invocation in that role, e.g. Python's lack of a single canonical build command), the corresponding skill operations skip — no build dispatch is made if `commands.build` is empty.
 
 This file is authoritative for code-producing agents. Whenever a contract or design clause could be expressed in a way that depends on language or toolchain (concurrency primitives, error handling style, package layout, file extensions), the agents must defer to project context, not pick something themselves. Contracts and design docs remain language-neutral; project context is where language-specific choices are recorded.
 

@@ -66,7 +66,7 @@ If any answer is "no" or "I would have to guess", **stop and emit a re-raise**. 
 
 Now write the code. Some properties of how you write it:
 
-- **Use the language and toolchain in the project context.** Not whatever language you'd reach for. If the project context says Python 3.11 with pytest, your output is Python 3.11 with pytest tests, regardless of how natural a different language would feel.
+- **Use the language and toolchain commands in the project context.** Not whatever language you'd reach for. If the project context says Python with `pytest` as the captured test command, your output is Python with tests runnable via that command. Read `project_context.toolchain.commands.test` (and `build`, `format`, `lint` as relevant) to know the project's invocation conventions; do not re-derive language-specific commands.
 - **Implement exactly the contract. Nothing more, nothing less.** Do not add a "useful" extra method. Do not expose internal state for "debuggability". Do not add a logging statement that was not specified. Do not add caching that the contract did not call for. The contract is the surface area, full stop.
 - **Honour every behavioural guarantee using the language's appropriate mechanism.** "Concurrent invocations are safe" means a thread-safe implementation in Java, a Send/Sync-bounded implementation in Rust, a goroutine-safe implementation in Go. Read the contract for the *property*, the project context for the *mechanism*.
 - **Use only the dependencies the manifest declares.** Do not call other modules, services, or external systems that were not in the dependency list. If you find yourself wanting to, that is a re-raise — your contract is wrong.

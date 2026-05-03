@@ -256,6 +256,8 @@ decision:
     ...
 ```
 
+**The `body` field is mandatory.** A `record_decision` action without a `body` is invalid — the dispatcher must reject it and surface the gap to the user as a finding rather than executing it. Decision records exist to be readable artefacts; an action that records "a decision happened" without naming what was decided is an empty decision and an audit-trail integrity bug. Do not emit `record_decision` actions that delegate body construction to the dispatcher; the orchestrator owns the decision content because the orchestrator is what reasoned about the decision.
+
 #### `wait_for_user`
 
 Emit when the build is paused waiting for user input that has been requested but not yet received. The dispatcher idles until input arrives.
@@ -334,15 +336,42 @@ The capture surface is a single `surface_to_user` action with `mode: structured`
 
 **Never proceed without an explicit user selection.** No silent defaults. No "if you don't answer in 60 seconds, we'll use Recommended". If the AskUserQuestion call times out, surface a free-text fallback prompt asking the user to take their time and re-engage when ready.
 
-**After language is selected, run toolchain detection.** Before writing the final `project_context.yaml`, emit a `run_command` action (or instruct the dispatcher via current_state.yaml) to run the appropriate detect script:
-- Go: `bash .claude/skills/_shared/scripts/detect/go.sh`
-- Python: `bash .claude/skills/_shared/scripts/detect/python.sh`
-- Node/TypeScript: `bash .claude/skills/_shared/scripts/detect/node.sh`
-- Other: write detection inline if a script does not yet exist; create the equivalent script alongside if you find yourself doing detection inline more than once.
+**After language is selected, capture toolchain commands.** Before writing the final `project_context.yaml`, capture the project's test, build, format, and lint commands in a single user-confirmation round. The skills do not contain language-specific detection logic; the per-language defaults live in a declarative registry at `.claude/skills/_shared/registries/toolchain-defaults.yaml` and the user always confirms.
 
-The script's stdout is YAML and goes verbatim under the `toolchain:` block in `project_context.yaml`. If detection fails (exit code 1), do **not** silently proceed with `binary_path: null`. Surface the failure to the user with a `surface_to_user` action explaining what was tried and asking them to install the toolchain or specify a path. Build cannot proceed until this is resolved — agents need a known-good toolchain path so they don't each rediscover it.
+Process:
 
-After the user responds and toolchain detection succeeds, write `project_context.yaml` with their answers, write a decision record explaining the captured context, and re-invoke (the next phase is `pre-design`).
+1. **Read the registry** to find the language entry (`rust`, `python`, `go`, `typescript`, etc.). If the user picked a language not in the registry, that's a re-raise — propose adding it during the capture round, or accept that defaults will be empty and the user types commands manually.
+
+2. **Run the binary probes for the captured language** via the dispatcher (instruct it to execute the probe commands listed in the registry entry, e.g. `command -v cargo`, `command -v rustc`). Capture exit codes and detected paths/versions. Probe failures are NOT fatal — they just mean defaults will be left empty for the user to fill in.
+
+3. **Surface a structured user-input round** with the recommended_commands from the registry pre-filled wherever probes succeeded. Each command is one question:
+   - "Test command — `cargo test` (recommended, detected) / type custom"
+   - "Build command — `cargo build --release` (recommended, detected) / type custom"
+   - "Format command — `cargo fmt --all` (recommended, detected) / type custom"
+   - "Lint command — `cargo clippy --all-targets` (recommended, detected) / type custom"
+
+4. **Write the captured commands to `project_context.yaml`** under `toolchain.commands`:
+
+   ```yaml
+   toolchain:
+     binary_path: /home/user/.cargo/bin/cargo  # from probes, optional
+     version: 1.85.0                            # from probes, optional
+     commands:
+       test: cargo test
+       build: cargo build --release
+       format: cargo fmt --all
+       lint: cargo clippy --all-targets
+   ```
+
+5. **Write a decision record** capturing the toolchain choices and re-invoke.
+
+This capture happens **once per project**, not once per leaf. Every subsequent dispatch — verifier, leaf, composition — reads `project_context.toolchain.commands.<name>` from the captured context. No re-detection. No re-asking. The values are settled at kickoff and reused for the lifetime of the build.
+
+If a leaf or verifier finds a missing command (e.g. an older project from before this captured field), that's a re-raise with `category: under_specified, suspected_source: project_context`. The orchestrator then surfaces a one-off "what's the X command for this project?" round and amends `project_context.yaml`.
+
+**The skills must not contain language-specific knowledge.** No `if language == "rust"` branches. No per-language scripts under `_shared/scripts/`. All language-specific defaults live in the registry; all language-specific runtime behaviour comes from the captured `toolchain.commands` strings the user confirmed.
+
+After the user responds and `project_context.yaml` is written, re-invoke (the next phase is `pre-design`).
 
 If the user later wants to amend project context (e.g. "actually let's do this in Rust instead"), this is a `surface_to_user` action again — re-run the capture, write a new context version, mark all stale work, re-dispatch the affected subtree. The existing stale-work machinery handles the cascade.
 
@@ -382,9 +411,14 @@ When the user or an upstream agent resolves a re-raise by amending a contract, y
 1. Write the new contract version (the amending agent's output is a new manifest; you place it at `contracts/<module>/v<N+1>.md` and update `meta.yaml`).
 2. Mark all implementations and compositions targeting the old version as `stale`.
 3. Record the decision explaining what changed and why.
-4. Dispatch the first stale node found by depth-first walk.
+4. **Compare the new contract against the existing implementation's manifest** (or composition's child contracts, for compositions). Determine whether the existing artefact already satisfies the new contract:
+   - If the new contract's behavioural guarantees, acceptance criteria, error semantics, and inputs/outputs are **all satisfied** by the existing implementation as written — the implementation is unchanged in substance — then this is a **re-verify-only** case. Skip re-implementation. Dispatch a verifier against the new contract version. If the verifier passes, mark the implementation `current` against the new contract version with a synthetic manifest carrying the existing implementation's content and the new contract's version reference. This is the cheap path.
+   - If the new contract requires **any** change in behaviour the implementation does not already exhibit, this is a **re-implement** case. Dispatch a leaf-implementation (or composition) subagent against the new contract version and let normal verification follow.
+   - If you are not sure, surface to the user with a `surface_to_user` action presenting the diff between old and new contracts, and ask "does this require re-implementation?" Default to re-implementation if the user does not have a clear answer — over-implementing is recoverable; shipping unverified-against-amendment code is not.
 
-Do not try to do all the re-dispatches in one invocation. The first one is yours; the rest are future orchestrator subagents'.
+5. Whichever path applies, dispatch the next step. The first dispatch is yours; the rest are future orchestrator subagents' work.
+
+The fast-path exists because contract amendments often clarify what was always true (e.g. an AC's wording reframed to match observed behaviour) rather than introducing new behaviour requirements. Re-implementing in those cases burns dispatches with no semantic change. Surfacing the cost-vs-correctness tradeoff to the user as a fast-path-or-reimplement choice keeps the orchestrator honest about when to take the cheap path.
 
 ### Detecting drift on cold reads
 

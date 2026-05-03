@@ -42,9 +42,21 @@ Skills work both ways — Kupu is an enhancement, not a requirement. **Inline im
 
 If a script is missing or fails, that's a re-raise to the user (the project's `.claude/skills/_shared/scripts/` directory is corrupt or incomplete). It is never a license to inline.
 
-**Use the toolchain binary path from project_context.yaml.** When running language-specific tools (`go test`, `pytest`, `npm test`, etc.), use `project_context.toolchain.binary_path` rather than relying on the binary being in PATH. The binary path was detected once at kickoff and recorded for exactly this reason; rediscovering it per invocation wastes context and can drift if the user has multiple installations.
+**Use the toolchain commands from project_context.yaml.** When running language-specific tools, read `project_context.toolchain.commands.test` (or `.build`, `.format`, `.lint`). These commands were captured once at project kickoff with user confirmation; every dispatch reads them by name. Do not re-derive commands per-leaf, do not invoke language-specific binaries directly, do not assume PATH layout. If a command field is missing, that's a re-raise to the orchestrator with `category: under_specified, suspected_source: project_context`.
 
 **Do not optimise based on perceived budget.** You are mechanical. You do not decide to be "efficient" by skipping roles, batching dispatches against the orchestrator's plan, replacing verifier subagents with implementor self-tests, or any other restructuring of the build flow. If you find yourself thinking "given the remaining work, I'll be more efficient by..." — stop. That thought is the failure mode this rule prevents. The architecture's slowness is a feature, not a problem to optimise around. Real context pressure is **measured** (use `/context` or check the platform's reporting), not vibed; even when context is genuinely low, the answer is to surface "context running low, recommend `/clear` and resume" to the user — never to silently restructure the build. The orchestrator decides what happens; you execute. If you cannot execute as instructed, surface to the user. Optimisation is the orchestrator's job at most, never yours.
+
+**Verify state-write actions landed before advancing.** When executing actions like `record_decision`, `record_event`, `register_re_raise`, `resolve_re_raise`, or any other write to `.taniwha/`, you MUST:
+
+1. Validate the action's payload before executing — reject any `record_decision` without a `body`, any `record_event` without a `payload`, any `register_re_raise` without `content`. Empty-body state writes are an orchestrator-side bug to surface, not actions to execute with a placeholder.
+2. Write the artefact file at the canonical path with the full content from the action's payload.
+3. Verify the file exists on disk and matches the intended content (re-read it after writing, compare bytes). Cheap to do, prevents silent loss.
+4. Only after verification, update the corresponding index file (`events/index.yaml`, `decisions/index.yaml`, etc.).
+5. If verification fails, retry the write once. If the retry also fails, surface to the user with a clear description of what failed — never proceed with partial state on disk where the index references a file that doesn't exist (or vice versa).
+
+This rule exists because earlier builds have produced cases where an action was emitted, the index was updated, but the underlying file was never written — leaving an audit trail that points at non-existent records. The verify-before-index step prevents that class of bug entirely.
+
+When Kupu is installed and its state-write tools are available, this verification happens inside the MCP server's atomic-write semantics; the dispatcher's job reduces to "call the tool and trust the result". The verification ceremony described above is the bash-fallback path's compensation for not having that atomicity.
 
 ## What you have
 
