@@ -201,39 +201,40 @@ If the user wants to inspect specific artefacts (a contract, a re-raise, a decis
 
 ## Initialising a new build
 
-When you are invoked on a project where `.taniwha/` does not yet exist, you are starting a new build. Your job at kickoff is mechanical: lay down the directory skeleton, write the initial `project.yaml` with sensible defaults, capture the user's brief at `brief/v1.md`, then invoke the orchestrator with reason `build_kickoff`.
+When you are invoked on a project where `.taniwha/` does not yet exist, you are starting a new build. Your job at kickoff is mechanical: lay down the directory skeleton, write the initial `project.yaml` with sensible defaults, capture the user's brief at `kupu/brief/v1.md`, then invoke the orchestrator with reason `build_kickoff`.
 
 You do **not** at this stage:
 - Capture project context (language, toolchain, conventions). The orchestrator will detect that `project_context.yaml` is missing on its first invocation and emit a `surface_to_user` action to gather it. You execute that action when it comes back to you, not on your own initiative.
 - Make any project-level decisions. Your kickoff work is purely structural — lay out the directories, write empty index files, capture the brief verbatim.
 - Write a design doc, contracts, or anything else substantive. That is all the orchestrator's call.
 
-The skeleton you create:
+The skeleton you create. Note that `.taniwha/` is the company-level namespace (shared by all Taniwha tools); the skills' state lives under `.taniwha/kupu/`. The cross-tool `project.yaml` sits at the company-level root.
 
 ```
 .taniwha/
-├── project.yaml                    # Minimal — id, name, taniwha_version, brief.path
-├── brief/
-│   └── v1.md                        # User's verbatim prompt with metadata header
-├── design/
-├── vocabulary/
-├── contracts/
-├── implementations/
-├── compositions/
-├── tree/
-│   └── history/
-├── re-raises/
-│   ├── open/
-│   └── resolved/
-├── decisions/
-├── events/
-└── orchestrator/
-    └── handoff/
+├── project.yaml                       # Cross-tool: id, name, taniwha_version, tool versions, brief.path
+└── kupu/                              # Skills' subtree (Kupu's namespace)
+    ├── brief/
+    │   └── v1.md                      # User's verbatim prompt with metadata header
+    ├── design/
+    ├── vocabulary/
+    ├── contracts/
+    ├── implementations/
+    ├── compositions/
+    ├── tree/
+    │   └── history/
+    ├── re-raises/
+    │   ├── open/
+    │   └── resolved/
+    ├── decisions/
+    ├── events/
+    └── orchestrator/
+        └── handoff/
 ```
 
-Plus the empty `index.yaml` files (events, decisions, re-raises) and a `build_started` event in the events log. Then invoke the orchestrator.
+Plus the empty `index.yaml` files (events, decisions, re-raises) under `.taniwha/kupu/` and a `build_started` event in `.taniwha/kupu/events/`. Then invoke the orchestrator.
 
-`project_context.yaml` is **not** part of the kickoff skeleton — it is created by the orchestrator's project-context capture flow on its first invocation, after the user answers the structured questions.
+`.taniwha/kupu/project_context.yaml` is **not** part of the kickoff skeleton — it is created by the orchestrator's project-context capture flow on its first invocation, after the user answers the structured questions.
 
 ## Resuming an interrupted build
 
