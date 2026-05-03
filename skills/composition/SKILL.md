@@ -23,7 +23,7 @@ You have been given exactly six things:
 2. **Child A's contract** — the manifest of the first child module.
 3. **Child B's contract** — the manifest of the second child module.
 4. **The shared vocabulary** — every data shape and external system the contracts refer to.
-5. **Child A's implementation manifest** — the manifest under `.taniwha/implementations/<A>/v<N>/manifest.yaml` (or compositions/ if A is itself a composition). This tells you the source paths and confirms the implementation is `current` and verified. **You do not get child A's source code as input.** You can read the source paths from disk if and only if you genuinely need to (e.g. to discover an exported function name in a language where the contract didn't specify one) — and that need itself is a sign the contract may be incomplete.
+5. **Child A's implementation manifest** — the manifest under `.taniwha/kupu/implementations/<A>/v<N>/manifest.yaml` (or compositions/ if A is itself a composition). This tells you the source paths and confirms the implementation is `current` and verified. **You do not get child A's source code as input.** You can read the source paths from disk if and only if you genuinely need to (e.g. to discover an exported function name in a language where the contract didn't specify one) — and that need itself is a sign the contract may be incomplete.
 6. **The project context** — language, repo style, directory layout, code conventions. The composition must be written in this language using these conventions.
 
 You do not have the design doc. You do not have ancestor contracts above the parent. You do not have other siblings that may exist in the wider tree. You operate strictly within these six documents.
@@ -32,7 +32,7 @@ You do not have the design doc. You do not have ancestor contracts above the par
 
 Composition source files live at the repo root, in the layout the project context specifies — typically a directory that wires modules together (e.g. `internal/api/`, `cmd/server/`, `src/handlers/`). The dispatcher provides explicit target paths.
 
-The composition's `notes.md` goes inside `.taniwha/compositions/<id>/v<N>/` alongside the manifest. The manifest you produce includes `source_paths` listing exactly which repo-root files implement this composition.
+The composition's `notes.md` goes inside `.taniwha/kupu/compositions/<id>/v<N>/` alongside the manifest. The manifest you produce includes `source_paths` listing exactly which repo-root files implement this composition.
 
 ## Process
 

@@ -20,33 +20,38 @@ These principles govern every decision in this layout. When extending or modifyi
 
 ## Top-level layout
 
-A Taniwha project lives in a single root directory. The user's source code lives at that root in whatever structure the project context specifies. Taniwha state lives in `.taniwha/` at the project root.
+A Taniwha project lives in a single root directory. The user's source code lives at that root in whatever structure the project context specifies. Taniwha tools' state lives in `.taniwha/` at the project root.
+
+`.taniwha/` is the company-level namespace. Each Taniwha tool owns its own subdirectory under `.taniwha/`. Cross-tool coordination (project ID, tool versions in use) lives in `.taniwha/project.yaml` at the company root. The skills covered by this document are backed by Kupu — the runtime state manager — which writes to `.taniwha/kupu/`.
 
 ```
 <project-root>/
-├── .taniwha/                    # Agent state — manifests, decisions, history
-│   ├── project.yaml
-│   ├── project_context.yaml     # Language, toolchain, repo conventions
-│   ├── brief/
-│   ├── design/
-│   ├── vocabulary/
-│   ├── contracts/
-│   ├── implementations/
-│   ├── compositions/
-│   ├── tree/
-│   ├── re-raises/
-│   ├── decisions/
-│   ├── events/
-│   └── orchestrator/
+├── .taniwha/                       # Company-level: shared by all Taniwha tools
+│   ├── project.yaml                # Project ID, name, tool versions in use
+│   └── kupu/                       # Skills' runtime state — managed by Kupu
+│       ├── project_context.yaml    # Language, toolchain, repo conventions
+│       ├── brief/
+│       ├── design/
+│       ├── vocabulary/
+│       ├── contracts/
+│       ├── implementations/
+│       ├── compositions/
+│       ├── tree/
+│       ├── re-raises/
+│       ├── decisions/
+│       ├── events/
+│       └── orchestrator/
 └── (user's source code laid out per project_context — at the repo root,
    not inside .taniwha/)
 ```
 
-**Critical separation: `.taniwha/` is agent state, not a code store.** Source code, build files, configuration, and any artefact intended for the user to ship lives at the repo root in the layout the project context describes. `.taniwha/` holds only the durable record of *what was built and why* — manifests pointing at source paths, decision records, event logs, contracts. A user committing this project to git would expect their editor to open at the repo root, their build commands to run there, and their CI to operate on those files. Putting source inside `.taniwha/` would conflate agent history with shipping artefacts and break all of that.
+Other Taniwha tools, when they need per-project state, get their own subdirectory under `.taniwha/` (e.g. `.taniwha/arai/` if Arai is extracted to per-project state in the future). Tools never write outside their own subdirectory, with the single exception of `.taniwha/project.yaml` which is the agreed cross-tool coordination point.
+
+**Critical separation: `.taniwha/` is agent and tool state, not a code store.** Source code, build files, configuration, and any artefact intended for the user to ship lives at the repo root in the layout the project context describes. `.taniwha/` holds only the durable record of *what was built and why* — manifests pointing at source paths, decision records, event logs, contracts. A user committing this project to git would expect their editor to open at the repo root, their build commands to run there, and their CI to operate on those files. Putting source inside `.taniwha/` would conflate tool history with shipping artefacts and break all of that.
 
 This separation is enforced through the implementations directory layout (described below): manifests reference source files by repo-root paths, they do not contain copies.
 
-Each subdirectory is described in detail below. Every file inside `.taniwha/` follows the conventions in "File conventions" at the end of this document.
+Each subdirectory under `.taniwha/kupu/` is described in detail below. Every file inside follows the conventions in "File conventions" at the end of this document.
 
 ## `.taniwha/project.yaml`
 
@@ -91,7 +96,7 @@ configuration:
 
 This file is small and rarely changes. Its purpose is to give a returning agent the project's basic shape in one read.
 
-## `.taniwha/project_context.yaml`
+## `.taniwha/kupu/project_context.yaml`
 
 Records the project-level facts that every code-producing agent must honour: language, toolchain, repository style, directory conventions, build/test commands, code style. Populated at kickoff via a structured user-input round, before any agent that produces code runs. Never populated by inference — these are the user's decisions, not the agents'.
 
@@ -131,7 +136,7 @@ This file is authoritative for code-producing agents. Whenever a contract or des
 
 The file is amended only by user action (via a structured user-input round). Agents may not edit it. If an agent finds that its work cannot be done within the current project context (e.g. the chosen language genuinely cannot satisfy a contract clause), the correct response is to re-raise with category `out_of_scope` and source `project_context`, asking the user to amend.
 
-## `.taniwha/brief/`
+## `.taniwha/kupu/brief/`
 
 The original user brief, versioned. The brief is the prompt the user gave at kickoff; subsequent versions exist when the user has answered re-raises or amended scope, and the answers are folded into the brief as authoritative text rather than scattered across decision records.
 
@@ -146,7 +151,7 @@ brief/
 
 Versioning the brief brings amendments into the same versioned-immutable model as design and vocabulary, making them discoverable to cold readers.
 
-## `.taniwha/design/`
+## `.taniwha/kupu/design/`
 
 The design document, versioned. Each version is a separate Markdown file. The current version is named in `project.yaml`.
 
@@ -161,7 +166,7 @@ The design doc itself is produced by the `design-doc` skill and follows that ski
 
 Each design doc version begins with a header recording its version number, the date it was approved, and a short note describing what changed from the previous version (or "initial version" for v1). This note is critical for cold-reading agents: it tells them whether they need to read older versions to understand current decisions.
 
-## `.taniwha/vocabulary/`
+## `.taniwha/kupu/vocabulary/`
 
 The shared vocabulary file (data shapes, external systems, cross-cutting concerns) referenced by all manifests. Versioned in the same way as the design doc.
 
@@ -174,7 +179,7 @@ vocabulary/
 
 The current version is referenced by name from `project.yaml` (add a `vocabulary.current_version` and `vocabulary.path` block alongside `design_doc`). Vocabulary versions track design doc versions but do not have to bump in lockstep — the vocabulary changes when shapes or shared concerns change, which may or may not be the same moment the design doc changes.
 
-## `.taniwha/contracts/`
+## `.taniwha/kupu/contracts/`
 
 The per-module manifests. Each manifest is a directory named for the module, containing one file per version.
 
@@ -217,9 +222,9 @@ versions:
 
 `derived_from` is critical: it pins each contract version to the design and vocabulary versions it was derived against. A returning agent can detect drift (current design version does not match what this contract was derived from) and flag it.
 
-`decision_ref` points to a record in `.taniwha/decisions/` explaining why this version exists. The initial version's decision is allowed to be the bare statement "derived from design v1"; subsequent versions must reference a substantive decision record.
+`decision_ref` points to a record in `.taniwha/kupu/decisions/` explaining why this version exists. The initial version's decision is allowed to be the bare statement "derived from design v1"; subsequent versions must reference a substantive decision record.
 
-## `.taniwha/implementations/`
+## `.taniwha/kupu/implementations/`
 
 Implementation manifests for leaf modules. Each implementation is a directory named for the module, with versioned subdirectories. **The actual source code does not live here** — it lives at the repo root, in the layout the project context specifies. This directory holds only the manifests that record which source files satisfied which version of which contract.
 
@@ -270,7 +275,7 @@ This is a deliberate tradeoff: source-code history belongs in the user's version
 
 `<module-name>/meta.yaml` records the version history at module level, mirroring the contracts pattern.
 
-## `.taniwha/compositions/`
+## `.taniwha/kupu/compositions/`
 
 Composition manifests for interior tree nodes. As with implementations, source code lives at the repo root in the layout the project context specifies; this directory holds only the manifests.
 
@@ -316,7 +321,7 @@ The `children` block is the wiring record — it pins this composition to specif
 
 The same source-code-history principle applies as for implementations: paths reference current files; reconstructing historical content uses git, not `.taniwha/`.
 
-## `.taniwha/tree/`
+## `.taniwha/kupu/tree/`
 
 The composition tree structure. One file, `tree.yaml`, plus a versioned history.
 
@@ -353,7 +358,7 @@ History files capture the tree at each significant change. Tree versions bump wh
 
 A returning agent reads `current.yaml` first to understand the project's overall shape, then descends into individual contracts and implementations as needed.
 
-## `.taniwha/re-raises/`
+## `.taniwha/kupu/re-raises/`
 
 The re-raise queue and history.
 
@@ -401,7 +406,7 @@ resolution:  # null while open
 
 Open re-raises are the orchestrator's worklist. Resolved re-raises are project history — a returning agent uses them to understand why current decisions are the way they are. `index.yaml` is a flat summary listing all re-raises for fast scanning.
 
-## `.taniwha/decisions/`
+## `.taniwha/kupu/decisions/`
 
 The reasoning record. Every substantive decision the system makes — contract amendments, re-pairings, escalations, user resolutions — has a decision record here.
 
@@ -450,7 +455,7 @@ This is the single most important artefact for returning-agent readability. A fu
 
 `index.yaml` is a chronological flat list of all decisions for fast scanning.
 
-## `.taniwha/events/`
+## `.taniwha/kupu/events/`
 
 The append-only event log. Records every action the orchestrator takes and every result it receives. Used for audit, debugging, and recovery.
 
@@ -488,7 +493,7 @@ Events are append-only and never edited. They are the system's ground-truth log;
 
 `index.yaml` is the most recent N events flat-listed for fast access by returning agents and by the orchestrator (the orchestrator typically only needs to know the recent events to decide what's next, not the entire history).
 
-## `.taniwha/orchestrator/`
+## `.taniwha/kupu/orchestrator/`
 
 The orchestrator's working area. Distinct from the rest of the layout because it changes rapidly and its content is consumed by the dispatcher and the next orchestrator subagent.
 

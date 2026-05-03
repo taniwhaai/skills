@@ -2,6 +2,12 @@
 
 This document describes the load-bearing architectural choices in Taniwha and why they exist. Read this if you want to understand *why* the system is structured the way it is, or if you're considering modifying or extending it.
 
+## Position: AI design as a primitive of the codebase
+
+Taniwha's broader thesis is that **AI design should be a primitive of the codebase, not a chat ephemeral.** A repository that is built and modified by AI agents should carry its own structural discipline, decision history, and contract definitions in a form that survives any individual conversation, agent, or developer. Source code is one artefact among several; design docs, contracts, vocabulary, decision records, and verification reports are first-class citizens of the repo.
+
+The skills described in this repo are one piece of that broader thesis. They constrain how the agent works during a build. The runtime backbone — Kupu — manages the durable state those skills produce. Together they let an AI-centric codebase be self-describing, audit-friendly, and resistant to drift across many conversations.
+
 ## The problem Taniwha solves
 
 LLMs given an open-ended brief produce code that:
@@ -53,7 +59,7 @@ Why: the implementor's tests can be wrong in the same way the implementation is 
 
 ## State on disk, not in context
 
-All project state lives in `.taniwha/`: design docs, contracts, vocabulary, manifests, decisions, events, re-raises. Subagents read state, decide one thing, write to state, exit. They have no memory between invocations.
+All project state lives in `.taniwha/kupu/`: design docs, contracts, vocabulary, manifests, decisions, events, re-raises. (`.taniwha/` itself is the company-level namespace; `kupu/` is the skills' subtree, and other Taniwha tools may use other subtrees.) Subagents read state, decide one thing, write to state, exit. They have no memory between invocations.
 
 Why: an LLM context window is finite and degrades over long conversations. State on disk is durable, inspectable, and version-controlled. A returning agent six months later can pick up where the previous build left off by reading the directory.
 
@@ -61,11 +67,11 @@ Why: an LLM context window is finite and degrades over long conversations. State
 
 The directory is structured so a returning agent (or human) can answer specific questions by reading specific files:
 
-- "What is this project for?" → `brief/v<N>.md`
-- "What's the current shape?" → `tree/current.yaml`
-- "What does this module promise?" → `contracts/<module>/v<N>.md`
-- "What was decided about X?" → `decisions/<id>.md`
-- "What happened?" → `events/<year>/<month>/<day>/...`
+- "What is this project for?" → `.taniwha/kupu/brief/v<N>.md`
+- "What's the current shape?" → `.taniwha/kupu/tree/current.yaml`
+- "What does this module promise?" → `.taniwha/kupu/contracts/<module>/v<N>.md`
+- "What was decided about X?" → `.taniwha/kupu/decisions/<id>.md`
+- "What happened?" → `.taniwha/kupu/events/<year>/<month>/<day>/...`
 
 Every file is named so its purpose is obvious. Every cross-reference uses paths that are valid on disk. No file points at content that lives only in some agent's context.
 

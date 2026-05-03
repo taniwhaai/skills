@@ -30,7 +30,7 @@ Every skill has the same shape:
 skills/<skill-name>/
 ├── SKILL.md                # The skill itself
 └── references/             # Resources the skill points at
-    ├── state-layout.md     # Authoritative description of .taniwha/
+    ├── state-layout.md     # Authoritative description of .taniwha/kupu/
     └── re-raise-protocol.md
 ```
 
@@ -49,4 +49,4 @@ Each subagent is a single `.md` file in `agents/` with YAML frontmatter declarin
 
 ## What this repo is NOT
 
-It is not Taniwha itself running. The output of running Taniwha (the `.taniwha/` directory of a built project) is a separate artifact that lives in the user's project, not here.
+It is not Taniwha itself running. The output of running Taniwha (the `.taniwha/` directory of a built project, with the skills' state under `.taniwha/kupu/`) is a separate artifact that lives in the user's project, not here.

@@ -21,7 +21,24 @@ You are the mechanical half of this split. The orchestrator skill is the thinkin
 
 These are non-negotiable.
 
-**Use the shared utility scripts for ULIDs, timestamps, and event paths.** Whenever you need a ULID, run `bash .claude/skills/_shared/scripts/util/new_ulid.sh`. Whenever you need a UTC timestamp (ISO 8601 or filename form), run `bash .claude/skills/_shared/scripts/util/now.sh` (with `--filename` for filename form, `--both` for both at the same instant). Whenever you need to construct an event file path, run `bash .claude/skills/_shared/scripts/util/event_path.sh <event-id>`. **Inline implementations of any of these — Python heredocs that generate ULIDs, `date -u +...` calls for timestamps, hand-built event paths — are violations.** The scripts exist so every Taniwha agent produces identical, sortable, predictable output; reaching for inline alternatives produces drift that's invisible until cold readers find the inconsistency.
+**Use Kupu (preferred) or the shared utility scripts for ULIDs, timestamps, event paths, and state writes.** Mechanical operations have two backends:
+
+*Preferred: Kupu MCP server.* If MCP tools with prefix `kupu.` are registered (Kupu installed), use them:
+- `kupu.new_id()` for ULIDs
+- `kupu.now()` for paired ISO + filename timestamps
+- `kupu.record_event(...)` for atomic event-write-plus-index-update
+- `kupu.record_decision(...)` for decision records
+- `kupu.create_handoff(...)` and `kupu.update_handoff_status(...)` for handoff lifecycle
+- `kupu.next_dispatchable_node()` for tree walks during build
+- See Kupu's tool surface for the full list
+
+*Fallback: bash utility scripts.* If Kupu is not installed:
+- `bash .claude/skills/_shared/scripts/util/new_ulid.sh` for ULIDs
+- `bash .claude/skills/_shared/scripts/util/now.sh` (with `--filename` or `--both`) for timestamps
+- `bash .claude/skills/_shared/scripts/util/event_path.sh <event-id>` for event paths
+- Direct file writes plus index updates for events, decisions, etc.
+
+Skills work both ways — Kupu is an enhancement, not a requirement. **Inline implementations of these primitives — Python heredocs that generate ULIDs, `date -u +...` calls for timestamps, hand-built event paths — are violations regardless of which backend is in use.** Identical, sortable, predictable output is the requirement; the backend is chosen by what's installed.
 
 If a script is missing or fails, that's a re-raise to the user (the project's `.claude/skills/_shared/scripts/` directory is corrupt or incomplete). It is never a license to inline.
 
@@ -40,7 +57,7 @@ You do **not** have the orchestrator's reasoning loaded. You do not decide which
 Your entire job is this loop:
 
 1. Spawn a fresh **orchestrator subagent** with the orchestrator skill loaded.
-2. When it returns, read `<project>/.taniwha/orchestrator/next_action.yaml`.
+2. When it returns, read `<project>/.taniwha/kupu/orchestrator/next_action.yaml`.
 3. Execute the action(s) it specifies. Most often this means spawning another subagent — a role agent for design, derivation, implementation, composition, or verification — and waiting for its result.
 4. When that role agent returns, place its outputs where the next_action specified, and go to step 1.
 
@@ -66,7 +83,7 @@ Wait for the subagent to return. Its final message will typically be a short con
 
 ### Step 2: read next_action.yaml
 
-Read `<project>/.taniwha/orchestrator/next_action.yaml`. It contains one or more actions in a list. Execute them in order.
+Read `<project>/.taniwha/kupu/orchestrator/next_action.yaml`. It contains one or more actions in a list. Execute them in order.
 
 ### Step 3: execute actions
 
@@ -76,7 +93,7 @@ Each action type has a specific execution. Do exactly what is specified. Do not 
 
 The orchestrator wants you to spawn a role subagent.
 
-1. Verify the handoff directory exists at `<project>/.taniwha/orchestrator/handoff/<handoff_id>/`. Create it if missing.
+1. Verify the handoff directory exists at `<project>/.taniwha/kupu/orchestrator/handoff/<handoff_id>/`. Create it if missing.
 2. Copy the input documents (listed under `inputs:` in the action) into `handoff/<handoff_id>/inputs/`. The subagent receives them by reference in its prompt; copying ensures the inputs are stable for the duration of the subagent's run.
 3. Spawn a subagent with:
    - The role skill loaded (one of: `design-doc`, `contract-derivation`, `leaf-implementation`, `composition`, verifier).
@@ -107,7 +124,7 @@ This is one of the few cases where you interact with the user directly. The acti
 1. Render the `context` field on the terminal first as a brief preface, so the user knows what they are being asked to decide.
 2. Invoke the AskUserQuestion tool. Pass the `questions` array directly through — each question's `header`, `question`, `options`, and `multi_select` map onto the tool's schema. The tool automatically appends an "Other (free text)" option, so do not add one yourself.
 3. The tool returns the user's selection(s). Each answer is either an option label or free-text the user typed in the "Other" slot.
-4. Write the response to `<project>/.taniwha/orchestrator/handoff/user-input-<id>/inputs/response.yaml` as structured data — one entry per question, each entry containing the question's header and the user's selected label(s) or free-text.
+4. Write the response to `<project>/.taniwha/kupu/orchestrator/handoff/user-input-<id>/inputs/response.yaml` as structured data — one entry per question, each entry containing the question's header and the user's selected label(s) or free-text.
 5. Append an event recording the input.
 6. Re-invoke the orchestrator with reason `user_input_received:<prompt_kind>`.
 
@@ -117,7 +134,7 @@ This is one of the few cases where you interact with the user directly. The acti
 
 1. Render the `prompt` field on the terminal exactly as written.
 2. Wait for the user's response in the next message.
-3. Write the response to `<project>/.taniwha/orchestrator/handoff/user-input-<id>/inputs/response.md` as a single Markdown document.
+3. Write the response to `<project>/.taniwha/kupu/orchestrator/handoff/user-input-<id>/inputs/response.md` as a single Markdown document.
 4. Append an event recording the input.
 5. Re-invoke the orchestrator with reason `user_input_received:<prompt_kind>`.
 
@@ -134,8 +151,8 @@ This is one of the few cases where you interact with the user directly. The acti
 #### `record_decision`
 
 1. Generate a ULID for the decision id (or use one from the action if provided).
-2. Write the decision body to `<project>/.taniwha/decisions/<id>.md` with the front-matter from the action.
-3. Append the id to `<project>/.taniwha/decisions/index.yaml`.
+2. Write the decision body to `<project>/.taniwha/kupu/decisions/<id>.md` with the front-matter from the action.
+3. Append the id to `<project>/.taniwha/kupu/decisions/index.yaml`.
 4. Append an event.
 5. Continue.
 
@@ -178,7 +195,7 @@ The dispatch loop continues automatically except in these cases:
 
 ## Status reporting
 
-If the user asks you for status mid-build (e.g. "what are you working on?", "where are we?"), you can answer by reading `<project>/.taniwha/orchestrator/current_state.yaml` and rendering it on the terminal. This is read-only — answering a status query does not affect the loop.
+If the user asks you for status mid-build (e.g. "what are you working on?", "where are we?"), you can answer by reading `<project>/.taniwha/kupu/orchestrator/current_state.yaml` and rendering it on the terminal. This is read-only — answering a status query does not affect the loop.
 
 If the user wants to inspect specific artefacts (a contract, a re-raise, a decision), point them to the relevant path under `.taniwha/`. The state layout is human-navigable; you don't need to summarise it for them unless they specifically ask.
 

@@ -35,7 +35,7 @@ These are non-negotiable. Without explicit hard rules at the orchestrator layer,
 
 This rule has a real exception: small recovery loops (≤2 dispatches) for routine errors don't need a pause. The threshold is "would a reasonable user want to know this is happening before it happens". A 25-dispatch refactor pipeline crosses that threshold. A single re-verify after a verifier flake does not.
 
-**Use the shared utility scripts for ULIDs, timestamps, and event paths.** Whenever you need a ULID, instruct the dispatcher (via `next_action.yaml`) to run `bash .claude/skills/_shared/scripts/util/new_ulid.sh`, OR run it yourself if you have Bash access in your subagent. Same for `now.sh` and `event_path.sh`. **Inline Python heredocs, `date -u +...` calls, or hand-built event paths are violations.** The scripts exist so every Taniwha agent produces identical, sortable, predictable output; reaching for inline alternatives produces drift that's invisible until cold readers find inconsistency. If you find yourself wanting to inline ULID generation because "it's just one line", that's the failure mode this rule prevents. Use the script.
+**Use Kupu (preferred) or the shared utility scripts for mechanical operations.** Where the dispatcher has direct access to `kupu.*` MCP tools and needs an ID, timestamp, event path, or state write, the orchestrator instructs the dispatcher to use those tools via `next_action.yaml` (e.g. `action: record_event` with payload that the dispatcher passes to `kupu.record_event`). If Kupu is not installed, the dispatcher falls back to bash utility scripts and manual file writes. Either way, **inline Python heredocs, `date -u +...` calls, or hand-built event paths are violations.** The orchestrator's own subagent context may not have direct access to Kupu tools; it instructs the dispatcher and the dispatcher executes. Identical, sortable, predictable output is the requirement; the backend is selected at the dispatcher layer based on what's installed.
 
 ## What you have
 
@@ -55,17 +55,17 @@ You do NOT have any conversational memory of prior orchestrator decisions. If yo
 
 If this is your first encounter with a Taniwha project, read `_shared/state-layout.md` (referenced in this skill's `references/` directory) to understand the directory structure and file conventions. The layout is permanent across projects — once you know it, you know it for any Taniwha project.
 
-**Path convention reminder.** All paths in this skill's action examples are relative to `<project>/.taniwha/`. The orchestrator's working area, including handoff directories, lives under `.taniwha/orchestrator/` — handoffs at `.taniwha/orchestrator/handoff/<id>/`, never at `.taniwha/handoff/<id>/`. Be precise about this; the dispatcher follows your paths verbatim and an inconsistency creates working state in the wrong place.
+**Path convention reminder.** All paths in this skill's action examples are relative to `<project>/.taniwha/`. The orchestrator's working area, including handoff directories, lives under `.taniwha/kupu/orchestrator/` — handoffs at `.taniwha/kupu/orchestrator/handoff/<id>/`, never at `.taniwha/kupu/handoff/<id>/`. Be precise about this; the dispatcher follows your paths verbatim and an inconsistency creates working state in the wrong place.
 
 ### 2. Establish current state
 
 Read in this order:
 
 1. `<project>/.taniwha/project.yaml` — project identity, design doc version in force, configuration.
-2. `<project>/.taniwha/orchestrator/current_state.yaml` — the previous orchestrator's distilled view of where the build is. This is your working summary, but it is a hint, not authority.
-3. `<project>/.taniwha/events/index.yaml` — the recent events index. This is authoritative.
-4. `<project>/.taniwha/re-raises/open/` — the list of open re-raises. Each is a decision waiting to be made.
-5. `<project>/.taniwha/tree/current.yaml` — the current tree shape, if a tree has been established.
+2. `<project>/.taniwha/kupu/orchestrator/current_state.yaml` — the previous orchestrator's distilled view of where the build is. This is your working summary, but it is a hint, not authority.
+3. `<project>/.taniwha/kupu/events/index.yaml` — the recent events index. This is authoritative.
+4. `<project>/.taniwha/kupu/re-raises/open/` — the list of open re-raises. Each is a decision waiting to be made.
+5. `<project>/.taniwha/kupu/tree/current.yaml` — the current tree shape, if a tree has been established.
 
 Do not read more than this on the first pass. The layout is large; descending into manifests and implementations costs context. Read deeply only into the artefacts directly relevant to the decision you are about to make.
 
@@ -114,7 +114,7 @@ inputs:
   # ...
 output_destination:
   # where the dispatcher places the subagent's outputs.
-  # ALL handoff working state lives under .taniwha/orchestrator/handoff/<handoff_id>/
+  # ALL handoff working state lives under .taniwha/kupu/orchestrator/handoff/<handoff_id>/
   path: orchestrator/handoff/<handoff-id>/outputs/
 expected_outputs:
   # what kinds of artefact the dispatcher should expect
@@ -285,11 +285,11 @@ Multiple actions can be emitted in sequence within one orchestrator invocation i
 
 ### 5. Write the decision
 
-Write your output to `<project>/.taniwha/orchestrator/next_action.yaml`. Overwrite the previous file — it is consumed by the dispatcher and not history.
+Write your output to `<project>/.taniwha/kupu/orchestrator/next_action.yaml`. Overwrite the previous file — it is consumed by the dispatcher and not history.
 
-Also update `<project>/.taniwha/orchestrator/current_state.yaml` with a fresh distilled view, so the next orchestrator subagent (which may be invoked seconds from now) starts with an accurate working summary. The current_state file is your handoff to your future self.
+Also update `<project>/.taniwha/kupu/orchestrator/current_state.yaml` with a fresh distilled view, so the next orchestrator subagent (which may be invoked seconds from now) starts with an accurate working summary. The current_state file is your handoff to your future self.
 
-For every substantive decision, also write the decision record to `<project>/.taniwha/decisions/<id>.md` and append an entry to the events log at `<project>/.taniwha/events/<year>/<month>/<day>/<timestamp>-<id>.yaml`. The events log is append-only — never edit prior entries.
+For every substantive decision, also write the decision record to `<project>/.taniwha/kupu/decisions/<id>.md` and append an entry to the events log at `<project>/.taniwha/kupu/events/<year>/<month>/<day>/<timestamp>-<id>.yaml`. The events log is append-only — never edit prior entries.
 
 ### 6. Exit
 

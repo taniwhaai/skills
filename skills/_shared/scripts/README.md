@@ -1,6 +1,8 @@
 # Taniwha shared scripts
 
-Bash utilities used by the dispatcher and orchestrator skills. Shared because every Taniwha agent that needs them should produce identical output — ULIDs, timestamps, event paths, and toolchain detection are exactly the kind of thing where each agent reaching for its own implementation produces subtly different results.
+Bash utilities used by the dispatcher and orchestrator skills as the **fallback backend** when Kupu (the MCP server) is not installed. Shared because every Taniwha agent that needs them should produce identical output — ULIDs, timestamps, event paths, and toolchain detection are exactly the kind of thing where each agent reaching for its own implementation produces subtly different results.
+
+When [Kupu](https://github.com/taniwhaai/kupu) is installed, skills prefer Kupu's MCP tools (`kupu.new_id`, `kupu.now`, `kupu.record_event`, etc.) over these scripts. The two backends produce identical on-disk output, so users can install Kupu later without re-running existing builds.
 
 ## Platform support
 
@@ -13,7 +15,7 @@ _shared/scripts/
 ├── util/
 │   ├── new_ulid.sh        # Generate a ULID
 │   ├── now.sh             # UTC timestamp (ISO 8601 or filename form)
-│   └── event_path.sh      # Build canonical .taniwha/events/... path
+│   └── event_path.sh      # Build canonical .taniwha/kupu/events/... path
 └── detect/
     ├── go.sh              # Locate Go toolchain, return path + version
     ├── python.sh          # Same for Python 3

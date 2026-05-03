@@ -2,6 +2,8 @@
 
 A discipline for AI-generated codebases. Imposes structure that holds as projects grow, with verifier-checked contracts and a re-raise loop that surfaces under-specification before code is written.
 
+This is the skills suite — the prompt-and-subagent layer. For the runtime backbone that makes the skills cheaper to operate (state management, atomic writes, schema validation), see [Kupu](https://github.com/taniwhaai/kupu) (in development).
+
 ## What this is
 
 LLMs given an open-ended brief tend to produce sprawling, inconsistent, hard-to-review code that drifts further from the brief as it grows. Taniwha is a set of skills and subagents that constrain how the agent works: it must agree on a structural shape before writing any code, contracts must be complete enough to implement in isolation, every implementation gets independently verified, and ambiguity gets surfaced as questions rather than silently filled in.
@@ -9,6 +11,18 @@ LLMs given an open-ended brief tend to produce sprawling, inconsistent, hard-to-
 The cost is more ceremony than a human writes by hand at small scale. The payoff is structure that holds as the codebase grows — and an audit trail of decisions, contracts, and verifications that survives the conversations that produced them.
 
 Taniwha matches structure to the brief. A small project gets a single contract, a single implementation, a single verifier. A large project gets a tree of modules with composition agents wiring them together. The design-doc agent decides which tier the brief calls for, and the user approves; the rest of the system follows.
+
+## The bigger picture
+
+Taniwha Skills is one piece of a wider toolset for AI-centric codebases. The thesis: **AI design should be a primitive of the codebase, not an afterthought.** Repositories should carry their own structural discipline, decision history, and contract definitions in a form that survives any individual conversation, agent, or developer. Source code is one artefact among several; design docs, contracts, vocabulary, and decision records are first-class citizens of the repo, not chat ephemera.
+
+The Taniwha suite currently spans:
+
+- **[Taniwha Skills](https://github.com/taniwhaai/taniwha-skills)** *(this repo)* — the discipline and prompts that constrain AI build behaviour
+- **[Kupu](https://github.com/taniwhaai/kupu)** *(in development)* — the runtime state backbone for AI-centric repos; manages contracts, decisions, events, re-raises in `.taniwha/kupu/`
+- **[Arai](https://github.com/taniwhaai/arai)** — local guardrails that enforce coding rules during AI-driven development
+
+Eventually all of these feed into Kete, Taniwha's broader platform for managing AI work across teams. None of that is required to use the skills today; this repo stands alone.
 
 ## Install
 
@@ -34,6 +48,12 @@ Then in Claude Code, ask it to start a Taniwha build:
 > Build me a [whatever you want] as a Taniwha project.
 
 The dispatcher takes over from there.
+
+### Optional: install Kupu
+
+The skills run on bash utility scripts and direct file writes by default. For a leaner agent context and atomic state operations, install [Kupu](https://github.com/taniwhaai/kupu) — the MCP server that backs Taniwha state. The skills detect Kupu at runtime; if installed, they use Kupu's tools, otherwise they fall back to the bash path.
+
+Both modes produce the same `.taniwha/kupu/` layout, so you can install Kupu later without re-running existing builds.
 
 ## How it works
 

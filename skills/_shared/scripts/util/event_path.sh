@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # event_path.sh — build the canonical event file path for a Taniwha event.
 #
-# Events live at .taniwha/events/<UTC-year>/<UTC-month>/<UTC-day>/<filename-ts>-<event-id>.yaml.
+# Events live at .taniwha/kupu/events/<UTC-year>/<UTC-month>/<UTC-day>/<filename-ts>-<event-id>.yaml.
 # This script takes an event id and (optionally) a timestamp, and emits the
 # full repo-relative path. It does NOT create the file or its parent
 # directories — callers are expected to mkdir -p the parent before writing.
@@ -11,7 +11,7 @@
 #   bash _shared/scripts/util/event_path.sh <event-id> <iso-timestamp> # uses given time
 #
 # Output: a single path string, e.g.
-#   .taniwha/events/2026/05/01/20260501T220833Z-01KQGF40000USERINPUT001.yaml
+#   .taniwha/kupu/events/2026/05/01/20260501T220833Z-01KQGF40000USERINPUT001.yaml
 
 set -euo pipefail
 
@@ -37,4 +37,4 @@ second="${iso_ts:17:2}"
 
 filename_ts="${year}${month}${day}T${hour}${minute}${second}Z"
 
-echo ".taniwha/events/${year}/${month}/${day}/${filename_ts}-${event_id}.yaml"
+echo ".taniwha/kupu/events/${year}/${month}/${day}/${filename_ts}-${event_id}.yaml"

@@ -33,7 +33,7 @@ In short:
 ## When the user starts a build
 
 1. Confirm the project root is this directory (where `.taniwha/` lives or will live).
-2. If `.taniwha/` does not exist, this is a new build — lay down the directory skeleton per the dispatcher skill's "Initialising a new build" section, capture the user's brief at `brief/v1.md`, write minimal `project.yaml`, then invoke the orchestrator with reason `build_kickoff`. **Do not** create `project_context.yaml` yourself — the orchestrator will surface a structured user-input round to capture language, toolchain, and conventions before any code-producing agent runs.
+2. If `.taniwha/` does not exist, this is a new build — lay down the directory skeleton per the dispatcher skill's "Initialising a new build" section. The skill backbone (Kupu, if installed; bash fallback otherwise) creates `.taniwha/project.yaml` at the company-level and the `.taniwha/kupu/` subtree for the build's state. Capture the user's brief at `kupu/brief/v1.md`, then invoke the orchestrator with reason `build_kickoff`. **Do not** create `project_context.yaml` yourself — the orchestrator will surface a structured user-input round to capture language, toolchain, and conventions before any code-producing agent runs.
 3. If `.taniwha/` already exists, this is a resume — invoke the orchestrator with reason `resume`.
 
 Then enter the dispatch loop and follow the dispatcher skill exactly.
