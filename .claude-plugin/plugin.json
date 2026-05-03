@@ -1,6 +1,6 @@
 {
   "name": "taniwha",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Compartmentalised, agent-driven build system for AI-generated codebases. Imposes structure that holds as projects grow, with verifier-checked contracts and a re-raise loop that surfaces under-specification before code is written. Optional MCP backend via Kupu.",
   "author": {
     "name": "Taniwha"

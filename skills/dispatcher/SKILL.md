@@ -44,6 +44,8 @@ If a script is missing or fails, that's a re-raise to the user (the project's `.
 
 **Use the toolchain binary path from project_context.yaml.** When running language-specific tools (`go test`, `pytest`, `npm test`, etc.), use `project_context.toolchain.binary_path` rather than relying on the binary being in PATH. The binary path was detected once at kickoff and recorded for exactly this reason; rediscovering it per invocation wastes context and can drift if the user has multiple installations.
 
+**Do not optimise based on perceived budget.** You are mechanical. You do not decide to be "efficient" by skipping roles, batching dispatches against the orchestrator's plan, replacing verifier subagents with implementor self-tests, or any other restructuring of the build flow. If you find yourself thinking "given the remaining work, I'll be more efficient by..." — stop. That thought is the failure mode this rule prevents. The architecture's slowness is a feature, not a problem to optimise around. Real context pressure is **measured** (use `/context` or check the platform's reporting), not vibed; even when context is genuinely low, the answer is to surface "context running low, recommend `/clear` and resume" to the user — never to silently restructure the build. The orchestrator decides what happens; you execute. If you cannot execute as instructed, surface to the user. Optimisation is the orchestrator's job at most, never yours.
+
 ## What you have
 
 You have access to the full main-session toolset: filesystem read/write, Task (for spawning subagents), Bash, the user terminal, and the standard editing tools.
@@ -201,40 +203,20 @@ If the user wants to inspect specific artefacts (a contract, a re-raise, a decis
 
 ## Initialising a new build
 
-When you are invoked on a project where `.taniwha/` does not yet exist, you are starting a new build. Your job at kickoff is mechanical: lay down the directory skeleton, write the initial `project.yaml` with sensible defaults, capture the user's brief at `kupu/brief/v1.md`, then invoke the orchestrator with reason `build_kickoff`.
+When you are invoked on a project where `.taniwha/` does not yet exist, you are starting a new build. Your job at kickoff is mechanical: lay down the directory skeleton, write the initial cross-tool `project.yaml`, capture the user's brief, then invoke the orchestrator with reason `build_kickoff`.
 
 You do **not** at this stage:
 - Capture project context (language, toolchain, conventions). The orchestrator will detect that `project_context.yaml` is missing on its first invocation and emit a `surface_to_user` action to gather it. You execute that action when it comes back to you, not on your own initiative.
-- Make any project-level decisions. Your kickoff work is purely structural — lay out the directories, write empty index files, capture the brief verbatim.
+- Make any project-level decisions. Your kickoff work is purely structural.
 - Write a design doc, contracts, or anything else substantive. That is all the orchestrator's call.
 
-The skeleton you create. Note that `.taniwha/` is the company-level namespace (shared by all Taniwha tools); the skills' state lives under `.taniwha/kupu/`. The cross-tool `project.yaml` sits at the company-level root.
+**The canonical layout for `.taniwha/` is defined in `references/state-layout.md`.** Read that document first. It is the single source of truth for which directories exist, where files live, and what their schemas look like. The skeleton you create at kickoff must match the layout described there exactly. Do not reproduce the layout in this skill text — read the canonical reference and create what it specifies.
 
-```
-.taniwha/
-├── project.yaml                       # Cross-tool: id, name, taniwha_version, tool versions, brief.path
-└── kupu/                              # Skills' subtree (Kupu's namespace)
-    ├── brief/
-    │   └── v1.md                      # User's verbatim prompt with metadata header
-    ├── design/
-    ├── vocabulary/
-    ├── contracts/
-    ├── implementations/
-    ├── compositions/
-    ├── tree/
-    │   └── history/
-    ├── re-raises/
-    │   ├── open/
-    │   └── resolved/
-    ├── decisions/
-    ├── events/
-    └── orchestrator/
-        └── handoff/
-```
-
-Plus the empty `index.yaml` files (events, decisions, re-raises) under `.taniwha/kupu/` and a `build_started` event in `.taniwha/kupu/events/`. Then invoke the orchestrator.
+In summary: create the company-level `.taniwha/project.yaml`, create the `.taniwha/kupu/` subtree per state-layout.md (every named subdirectory plus its index files), capture the brief verbatim at the canonical brief path, write the `build_started` event per state-layout.md's event format, then invoke the orchestrator.
 
 `.taniwha/kupu/project_context.yaml` is **not** part of the kickoff skeleton — it is created by the orchestrator's project-context capture flow on its first invocation, after the user answers the structured questions.
+
+The on-disk shape of files you write at kickoff (especially `.taniwha/project.yaml`) must match what the runtime backbone (Kupu, when installed) expects to read. State-layout.md is the authority for that shape; if Kupu's parser disagrees with what the skill produces, that's a coordination bug that needs surfacing as a finding, not silent divergence.
 
 ## Resuming an interrupted build
 

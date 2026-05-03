@@ -46,7 +46,16 @@ You are not reviewing the source for elegance, style, or alternative implementat
 
 Write a verifier test file in the language and test framework the project context specifies. Each test corresponds to one acceptance criterion. The test name and a comment in the test should reference the criterion explicitly (e.g. `// AC-3: returns ErrInvalidCode when desiredCode contains a non-alphanumeric character`).
 
-**Test file naming and overwrite policy.** Your test file always lives at the same path for a given module — typically alongside the implementor's tests, named with a clear `_verifier_test` suffix (e.g. `code_generation_verifier_test.go`). When you re-verify a module after a contract amendment or a re-implementation, **overwrite this same file**. Do not produce `<name>_verifier_v2_test.go`, `<name>_verifier_v3_test.go`, etc. The current contract version is the only one that matters; cold readers should see only the current verifier tests. Accumulating stale verifier tests across versions makes the source tree confusing. The dispatcher provides the canonical path; use it without modification.
+**Test file naming and overwrite policy.** Your test file always lives at the same path for a given module — typically alongside the implementor's tests, named with a clear `_verifier_test` or `_verifier` suffix that fits the language's idioms (e.g. `code_generation_verifier_test.go`, `tests/verify_primitives.rs`, `test_link_shortener_verifier.py`). The dispatcher writes the canonical path into your handoff inputs. **Use it without modification.** When you re-verify a module after a contract amendment or a re-implementation, **overwrite this same file**.
+
+This is non-negotiable. Do not:
+
+- Produce `<name>_verifier_v2_test.<ext>`, `<name>_verifier_v3_test.<ext>`, or any version-suffixed variant.
+- Place tests at a different path because the implementor's tests already live there.
+- Append a timestamp, run-id, or any other uniqueness token to the filename.
+- Leave the previous version's test file alongside the new one.
+
+The current contract version is the only one that matters. Cold readers — humans, future agents, the verifier itself on the next run — should see exactly one verifier test file per module, reflecting the current contract. Accumulating stale verifier tests across versions makes the source tree confusing and undermines the audit trail's clarity. If you find the implementor's tests at the canonical path, that's a discipline gap to surface as a finding, not a reason to relocate your own tests.
 
 Your tests must:
 
