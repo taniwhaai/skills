@@ -51,9 +51,19 @@ The dispatcher takes over from there.
 
 ### Optional: install Kupu
 
-The skills run on bash utility scripts and direct file writes by default. For a leaner agent context and atomic state operations, install [Kupu](https://github.com/taniwhaai/kupu) — the MCP server that backs Taniwha state. The skills detect Kupu at runtime; if installed, they use Kupu's tools, otherwise they fall back to the bash path.
+The skills run on bash utility scripts and direct file writes by default. For a leaner agent context and atomic state operations, install [Kupu](https://github.com/taniwhaai/kupu) — the MCP server that backs Taniwha state. The skills detect Kupu's tools at runtime per-operation; whichever tools are available are used, and the rest fall through to the bash path.
 
-Both modes produce the same `.taniwha/kupu/` layout, so you can install Kupu later without re-running existing builds.
+Both modes produce the same `.taniwha/kupu/` layout, so you can install Kupu later (or upgrade across Kupu phases) without re-running existing builds.
+
+**Kupu ships in phases.** Each phase adds tools without breaking previously-shipped surfaces. Skills work with any Kupu phase installed, falling back to bash for tools not yet shipped:
+
+- **Phase 1** — primitives (`new_id`, `now`) and project lifecycle (`init`, `get_project`)
+- **Phase 2** — durable writes (`record_event`, `record_decision`, `register_re_raise`, `resolve_re_raise`)
+- **Phase 3+** — read tools, artefact CRUD, tree operations, toolchain detection, build metrics (planned)
+
+A Phase 1-only Kupu installation produces a build trace that uses Kupu for IDs and timestamps but bash for state writes. A Phase 2 installation uses Kupu for both. The skills don't need configuration to handle this — detection is per-operation.
+
+For the full Kupu tool surface and roadmap, see the kupu repository's `docs/kupu-tool-surface.md`.
 
 ## How it works
 

@@ -46,17 +46,21 @@ If a script is missing or fails, that's a re-raise to the user (the project's `.
 
 **Do not optimise based on perceived budget.** You are mechanical. You do not decide to be "efficient" by skipping roles, batching dispatches against the orchestrator's plan, replacing verifier subagents with implementor self-tests, or any other restructuring of the build flow. If you find yourself thinking "given the remaining work, I'll be more efficient by..." — stop. That thought is the failure mode this rule prevents. The architecture's slowness is a feature, not a problem to optimise around. Real context pressure is **measured** (use `/context` or check the platform's reporting), not vibed; even when context is genuinely low, the answer is to surface "context running low, recommend `/clear` and resume" to the user — never to silently restructure the build. The orchestrator decides what happens; you execute. If you cannot execute as instructed, surface to the user. Optimisation is the orchestrator's job at most, never yours.
 
-**Verify state-write actions landed before advancing.** When executing actions like `record_decision`, `record_event`, `register_re_raise`, `resolve_re_raise`, or any other write to `.taniwha/`, you MUST:
+**Surface natural checkpoints.** Multi-hour builds accumulate dispatcher context across subagent returns, bash output, file reads, and orchestrator round summaries. After approximately every 5-7 state-modifying actions (a leaf-and-verifier pair counts as two; a composition-and-verifier pair counts as two; a contract amendment plus its dispatch counts as two), the dispatcher should surface a structured "natural checkpoint" message to the user offering to `/clear` and resume. The form is approximately: *"This is a natural checkpoint — N actions completed since the last clear, M remaining in the cascade. You may want to `/clear` and resume; the dispatcher will pick up cleanly from `next_action.yaml`. Or say 'continue' to keep going in this session."*
 
-1. Validate the action's payload before executing — reject any `record_decision` without a `body`, any `record_event` without a `payload`, any `register_re_raise` without `content`. Empty-body state writes are an orchestrator-side bug to surface, not actions to execute with a placeholder.
-2. Write the artefact file at the canonical path with the full content from the action's payload.
-3. Verify the file exists on disk and matches the intended content (re-read it after writing, compare bytes). Cheap to do, prevents silent loss.
-4. Only after verification, update the corresponding index file (`events/index.yaml`, `decisions/index.yaml`, etc.).
-5. If verification fails, retry the write once. If the retry also fails, surface to the user with a clear description of what failed — never proceed with partial state on disk where the index references a file that doesn't exist (or vice versa).
+This is not a context-pressure check (those are surfaced separately when measured pressure crosses a threshold). This is a structural offer — durable state on disk makes resume cheap, and bounded per-session context keeps each round's cost predictable. The user may continue in-session if they prefer; the architectural guarantee is that resume *works* whenever they choose to use it.
 
-This rule exists because earlier builds have produced cases where an action was emitted, the index was updated, but the underlying file was never written — leaving an audit trail that points at non-existent records. The verify-before-index step prevents that class of bug entirely.
+The 5-7 action cadence is not enforced rigidly — it is a guideline. Natural cascade boundaries (e.g. "all leaves verified, about to start composition phase") are also good checkpoint moments regardless of action count. The dispatcher's judgement here is about *recognising* a natural pause point, not about counting precisely.
 
-When Kupu is installed and its state-write tools are available, this verification happens inside the MCP server's atomic-write semantics; the dispatcher's job reduces to "call the tool and trust the result". The verification ceremony described above is the bash-fallback path's compensation for not having that atomicity.
+**Verify state-write actions landed before advancing.** Every action that writes durable state to `.taniwha/` (event records, decision records, re-raise records, tree mutations) has two possible backends:
+
+1. **Kupu MCP tool** if available (`kupu.record_event`, `kupu.record_decision`, `kupu.register_re_raise`, `kupu.resolve_re_raise`). When the tool returns success, the write is atomic by construction — the MCP server has already verified the write landed, validated the schema, and updated any associated index. **No further verification is needed.**
+
+2. **Bash-fallback** if the corresponding Kupu tool is not available. The bash path requires explicit ceremony: validate the action's payload (reject empty `body`, empty `payload`, etc.), write the artefact file, re-read it to verify content matches, then update the index. If verification fails, retry once; if retry fails, surface to the user.
+
+Per-operation detection: try the MCP tool first; if not present in the tool list, fall back to bash. See `references/kupu-phases.md` for the full mapping of operations to tools.
+
+The bash-fallback ceremony exists *because* the bash path lacks the atomicity guarantees Kupu provides server-side. When Kupu is present, the work is shorter, safer, and produces less ceremony in the audit trail. Prefer Kupu when available — that's the strong default. Bash exists as a fallback to preserve functionality when Kupu is absent, not as an equal alternative.
 
 ## What you have
 

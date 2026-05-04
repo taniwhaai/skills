@@ -1,7 +1,7 @@
 {
   "name": "taniwha",
-  "version": "1.9.0",
-  "description": "Compartmentalised, agent-driven build system for AI-generated codebases. Imposes structure that holds as projects grow, with verifier-checked contracts, a re-raise loop that surfaces under-specification before code is written, language-agnostic toolchain capture, and a contract-amendment fast-path. Optional MCP backend via Kupu.",
+  "version": "2.0.0",
+  "description": "Compartmentalised, agent-driven build system for AI-generated codebases. Imposes structure that holds as projects grow, with verifier-checked contracts, a re-raise loop that surfaces under-specification before code is written, language-agnostic toolchain capture, and a contract-amendment fast-path. Uses Kupu's MCP backend when installed for atomic state operations and lighter agent context; falls back to bash scripts when not. Phase-aware detection means any Kupu phase installation works seamlessly.",
   "author": {
     "name": "Taniwha"
   },
