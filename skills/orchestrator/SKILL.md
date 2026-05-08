@@ -73,6 +73,24 @@ Read in this order:
 
 Do not read more than this on the first pass. The layout is large; descending into manifests and implementations costs context. Read deeply only into the artefacts directly relevant to the decision you are about to make.
 
+**Prefer Kupu read tools when available.** Where the orchestrator has access to `kupu.*` MCP read tools, those are preferred over direct filesystem reads. Per-operation detection: try the Kupu tool first; if not present, fall back to the file path. The mapping is:
+
+- `kupu.get_project_context()` instead of reading `project_context.yaml` directly
+- `kupu.list_events()` (with optional `kind` and `since` filters) instead of reading `events/index.yaml`
+- `kupu.get_event(event_id)` instead of reading individual event files
+- `kupu.list_re_raises(status: "open")` instead of `ls re-raises/open/`
+- `kupu.get_re_raise(id)` instead of reading individual re-raise files
+- `kupu.list_decisions()` and `kupu.get_decision(id)` instead of reading decision files
+- `kupu.get_tree()` instead of reading `tree/current.yaml`
+- `kupu.get_brief(version?)` and `kupu.list_briefs()` instead of reading brief files
+- `kupu.get_design(version?)` and `kupu.list_designs()` for design reads (if available)
+- `kupu.get_vocabulary(version?)` for vocabulary reads (if available)
+- `kupu.get_contract(module, version?)` for contract reads (if available)
+
+Kupu reads are pure, return parsed structured data, and validate `schema_version: 1`. A `MalformedRecord` or `UnsupportedSchemaVersion` error from a Kupu read tool is a real finding worth surfacing to the user, not a transient retry condition.
+
+When Kupu's tools are not available (Phase 1+2 only installation, or no Kupu at all), fall back to direct file reads and parse the YAML/Markdown yourself. The reference doc `references/kupu-phases.md` describes which Kupu phase ships which tools. The reference doc `references/state-layout.md` describes the file shapes for direct reads.
+
 ### 3. Identify the build's current phase
 
 A Taniwha build has a small number of distinguishable phases. Identify which one applies based on what's on disk:
@@ -261,6 +279,12 @@ decision:
 ```
 
 **The `body` field is mandatory.** A `record_decision` action without a `body` is invalid — the dispatcher must reject it and surface the gap to the user as a finding rather than executing it. Decision records exist to be readable artefacts; an action that records "a decision happened" without naming what was decided is an empty decision and an audit-trail integrity bug. Do not emit `record_decision` actions that delegate body construction to the dispatcher; the orchestrator owns the decision content because the orchestrator is what reasoned about the decision.
+
+**The `record_decision` body and Kupu's `kupu.record_decision` API.** Kupu's `kupu.record_decision` MCP tool (Phase 2) accepts `kind`, `summary`, `affects`, and `triggered_by` — it does NOT accept a `body` parameter. The Phase 2 design intent was that Kupu writes the canonical section-header skeleton with empty bodies, leaving body content to be filled by future tools. In practice, the orchestrator routinely has rich body content at decision time and there is no API path to pass it through Kupu atomically.
+
+The current accepted behaviour is: when the body is non-trivial, the dispatcher writes the decision file directly (bypassing `kupu.record_decision` for that specific case), preserving the full body verbatim and updating the decisions index manually. This is documented behaviour, not a workaround — the audit trail is intact, the file is at the canonical path, the schema is canonical. The bypass is necessary because `kupu.record_decision` cannot accept the body and round-trip discipline forbids splitting the write across two calls.
+
+A future Kupu phase (currently planned for Phase 5.5 or 6 of Kupu) will add an optional `body` parameter to `kupu.record_decision`, closing this gap. Until then, the dispatcher's direct-write fallback for rich-body decisions is the correct path.
 
 #### `wait_for_user`
 

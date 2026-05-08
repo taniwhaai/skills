@@ -64,6 +64,28 @@ Your tests must:
 - **Test edge cases the contract explicitly names.** Empty inputs, boundary values, named error conditions, concurrent invocations if the contract guarantees concurrency safety, retry counts if the contract names them.
 - **Not duplicate the implementor's tests.** Read the contract, write your tests from there. If your tests happen to overlap with the implementor's, that's expected — but if you find yourself reading their tests to know what to test, stop and re-read the contract.
 
+### 3.5: Round-trip tests for paired write/read families
+
+When the contract you are verifying defines a write tool and a corresponding read tool that produce/consume the same on-disk artefact (e.g. `record_event`/`get_event`, `write_brief`/`get_brief`, `record_dispatch_metrics`/`get_dispatch_metrics`), you MUST include round-trip tests that exercise both tools in the same test, against the same data.
+
+The pattern is:
+
+1. Construct an input value matching the write tool's input contract.
+2. Call the write tool with that input.
+3. Call the read tool to retrieve the just-written artefact.
+4. Assert that the read tool's output reconstructs the input (modulo server-derived fields like ids and timestamps that the writer minted).
+
+This is non-negotiable for paired write/read families. **Module-internal tests passing without a true cross-tool round-trip exercise have allowed real format mismatches to slip past verification in earlier builds** — for example, a writer producing one document shape while the reader expects a different shape, with both sides' tests passing against their own assumptions while the actual cross-tool flow is broken.
+
+The round-trip test must:
+
+- **Use the actual public tool entry points**, not internal helpers. If the contract says `kupu.write_brief` writes a brief and `kupu.get_brief` reads it, the round-trip test calls those exact tools, not their internal write_brief_impl or get_brief_impl.
+- **Run in a single test invocation.** Write-then-read in one test, not write-in-test-A and read-in-test-B with shared fixtures. The point is to exercise the cross-tool flow end-to-end.
+- **Cover format edges.** If the writer accepts optional fields, exercise both with-field and without-field cases; if the reader handles missing optional fields differently, the round-trip should reveal it.
+- **Be added to the verifier test file even if the implementor's tests already include round-trip tests.** Verifier tests are independent; if the implementor's coverage of the round-trip path is partial or wrong, the verifier's independent test is what catches that.
+
+If a paired write/read family lacks round-trip tests in your verifier file, the verifier report's `overall:` MUST be `partial` rather than `pass` until they are added — even if every other AC passes individually. Round-trip discipline is foundational to the audit-trail guarantees the system relies on.
+
 ### 4. Run the tests
 
 Run them using `project_context.toolchain.commands.test`. The exit code is the source of truth: zero is pass, non-zero is fail. Capture stdout and stderr verbatim for the verifier report so failures can be diagnosed.

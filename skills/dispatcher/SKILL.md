@@ -186,6 +186,20 @@ In Claude Code's model, the user types when they're ready. So practically: you s
 2. Append a `build_completed` event.
 3. Stop the loop. Wait for the user to either acknowledge completion (do nothing further), or to give a new instruction (which may start a new build phase).
 
+### Step 3.5: record dispatch metrics
+
+After every subagent dispatch completes (succeeded, failed, or re-raised), if Kupu's metrics tools are available, record metrics for that dispatch via `kupu.record_dispatch_metrics`. This step happens between the subagent returning and the next orchestrator invocation.
+
+The dispatcher's responsibility is to **extract whatever metrics the host has shown for the subagent return** — token counts, wall-clock duration, tool-use counts — and pass them to `kupu.record_dispatch_metrics` along with the role and model the dispatcher knows from the dispatch itself. The host renders subagent returns differently depending on which platform the skill is running on; the dispatcher reads its own context (whatever the host has shown it) and parses what it can see.
+
+When extraction is partial (some fields visible, others not), the dispatcher passes `null` for fields it could not extract and sets `parse_failure: true` on the record. When extraction is complete (token counts AND wall-clock present), `parse_failure: false`.
+
+This step **never blocks build progress.** A failed extraction (host doesn't expose metrics, format unrecognised, partial data) results in a partial record being saved with `parse_failure: true` — never an error or a halted build. Metrics are an optional capability; the build's correctness does not depend on them.
+
+If Kupu is not installed, this step is skipped entirely — there is no bash-fallback for metrics. Builds without Kupu produce no metric records, and that is fine.
+
+The complete contract — including the field names, graceful-degradation rules, the host-agnostic principle, and the orchestrator's action shape — is described in `references/dispatch-metrics.md`. Refer to it whenever clarification is needed.
+
 ### Step 4: continue the loop
 
 After executing the action(s), unless the action explicitly stops the loop (`wait_for_user` or `complete`), go back to step 1 and invoke a fresh orchestrator subagent.
