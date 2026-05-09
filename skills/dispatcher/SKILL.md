@@ -23,22 +23,23 @@ These are non-negotiable.
 
 **Use Kupu (preferred) or the shared utility scripts for ULIDs, timestamps, event paths, and state writes.** Mechanical operations have two backends:
 
-*Preferred: Kupu MCP server.* If MCP tools with prefix `kupu.` are registered (Kupu installed), use them:
-- `kupu.new_id()` for ULIDs
-- `kupu.now()` for paired ISO + filename timestamps
-- `kupu.record_event(...)` for atomic event-write-plus-index-update
-- `kupu.record_decision(...)` for decision records
-- `kupu.create_handoff(...)` and `kupu.update_handoff_status(...)` for handoff lifecycle
-- `kupu.next_dispatchable_node()` for tree walks during build
-- See Kupu's tool surface for the full list
+*Preferred: Kupu MCP server.* If MCP tools with prefix `kupu.` are registered (Kupu installed), use them per the per-operation mapping in `references/kupu-phases.md`. The summary by phase:
+- **Phase 1** primitives + lifecycle: `kupu.new_id`, `kupu.now`, `kupu.init`, `kupu.get_project`
+- **Phase 2** durable writes: `kupu.record_event`, `kupu.record_decision`, `kupu.register_re_raise`, `kupu.resolve_re_raise`
+- **Phase 3** reads: `kupu.get_event`, `kupu.list_events`, `kupu.get_decision`, `kupu.list_decisions`, `kupu.get_re_raise`, `kupu.list_re_raises`, `kupu.get_tree`, `kupu.get_brief`, `kupu.list_briefs`, `kupu.get_project_context`
+- **Phase 4** metrics: `kupu.record_dispatch_metrics`, `kupu.get_dispatch_metrics`, `kupu.get_build_metrics`, `kupu.get_dispatch_trace`, `kupu.export_metrics`
+- **Phase 5** artefact CRUD writes: `kupu.write_brief`, `kupu.write_design`, `kupu.write_vocabulary`, `kupu.write_contract`, `kupu.write_project_context` (plus paired reads `kupu.get_design`, `kupu.list_designs`, `kupu.get_vocabulary`, `kupu.get_contract`, `kupu.list_contracts`)
+- **Phase 6** tree operations: `kupu.next_dispatchable_node`, `kupu.create_handoff`, `kupu.update_handoff_status`, `kupu.promote_implementation`, `kupu.mark_subtree_stale`, `kupu.get_handoff`, `kupu.list_handoffs`
+- **Phase 7** validation: `kupu.detect_toolchain`, `kupu.validate_contract`, `kupu.validate_vocabulary`
 
-*Fallback: bash utility scripts.* If Kupu is not installed:
+*Fallback: bash utility scripts and direct file writes.* If Kupu is not installed, or a specific Kupu phase's tools are not available:
 - `bash .claude/skills/_shared/scripts/util/new_ulid.sh` for ULIDs
 - `bash .claude/skills/_shared/scripts/util/now.sh` (with `--filename` or `--both`) for timestamps
 - `bash .claude/skills/_shared/scripts/util/event_path.sh <event-id>` for event paths
-- Direct file writes plus index updates for events, decisions, etc.
+- Direct file writes plus index updates for events, decisions, re-raises, briefs, designs, contracts, vocabularies, project_context — every artefact family has a canonical path and shape per `references/state-layout.md`
+- Manual handoff directory creation, manual tree mutations, manual handoff lifecycle status updates when Phase 6 tools are absent
 
-Skills work both ways — Kupu is an enhancement, not a requirement. **Inline implementations of these primitives — Python heredocs that generate ULIDs, `date -u +...` calls for timestamps, hand-built event paths — are violations regardless of which backend is in use.** Identical, sortable, predictable output is the requirement; the backend is chosen by what's installed.
+Skills work both ways — Kupu is an enhancement, not a requirement. **Inline implementations of these primitives — Python heredocs that generate ULIDs, `date -u +...` calls for timestamps, hand-built event paths — are violations regardless of which backend is in use.** Identical, sortable, predictable output is the requirement; the backend is chosen per-operation by what's installed.
 
 If a script is missing or fails, that's a re-raise to the user (the project's `.claude/skills/_shared/scripts/` directory is corrupt or incomplete). It is never a license to inline.
 
@@ -111,9 +112,8 @@ Each action type has a specific execution. Do exactly what is specified. Do not 
 
 The orchestrator wants you to spawn a role subagent.
 
-1. Verify the handoff directory exists at `<project>/.taniwha/kupu/orchestrator/handoff/<handoff_id>/`. Create it if missing.
-2. Copy the input documents (listed under `inputs:` in the action) into `handoff/<handoff_id>/inputs/`. The subagent receives them by reference in its prompt; copying ensures the inputs are stable for the duration of the subagent's run.
-3. Spawn a subagent with:
+1. Create the handoff structure. **Prefer `kupu.create_handoff(role, model, target_node, inputs)`** when available — it atomically creates the directory at `<project>/.taniwha/kupu/orchestrator/handoff/<handoff_id>/`, writes the meta.yaml with `status: created`, copies the inputs into `handoff/<handoff_id>/inputs/`, and updates `tree/current.yaml` to mark the target node as in-flight. The `inputs` parameter is a list of `{filename, content}` pairs — the dispatcher reads source files (briefs, contracts, etc.) and passes their content directly. If `kupu.create_handoff` is unavailable, fall back: verify or create the handoff directory manually, copy input documents into `inputs/` by file write, and write meta.yaml directly per `references/state-layout.md`.
+2. Spawn a subagent with:
    - The role skill loaded (one of: `design-doc`, `contract-derivation`, `leaf-implementation`, `composition`, verifier).
    - The model specified in the action.
    - A prompt that includes:
@@ -121,15 +121,17 @@ The orchestrator wants you to spawn a role subagent.
      - The paths of the input documents (relative to the project root).
      - The output destination (where to write its results).
      - A clear instruction that this is a Taniwha role subagent and it should follow its skill exactly.
+3. Update handoff status to `dispatched` via `kupu.update_handoff_status(handoff_id, "dispatched", {dispatched_at})` if the tool is available; otherwise edit meta.yaml directly.
 4. Wait for the subagent to return.
 5. Write the subagent's outputs to `handoff/<handoff_id>/outputs/`. If the subagent emitted a re-raise, it writes a re-raise YAML; otherwise it writes its work products (manifests, code, notes).
-6. Update `handoff/<handoff_id>/meta.yaml` with the subagent's status (succeeded, re-raised, failed) and timing.
-7. Append an event to the events log recording the dispatch and result.
-8. Go back to step 1 of the dispatch loop — invoke the orchestrator again with reason `subagent_returned:<role>:<handoff_id>`.
+6. Update handoff status to `returned` via `kupu.update_handoff_status(handoff_id, "returned", {returned_at, ...})` if available; otherwise update meta.yaml directly. The status FSM enforces valid transitions when Kupu is in use; the bash fallback path is convention-driven.
+7. Append a `subagent_returned` event to the events log via `kupu.record_event` (preferred) or by direct file write (fallback).
+8. Record dispatch metrics per Step 3.5 (see below).
+9. Go back to step 1 of the dispatch loop — invoke the orchestrator again with reason `subagent_returned:<role>:<handoff_id>`.
 
 #### `route_re_raise`
 
-1. Append an event recording the routing.
+1. Append an event recording the routing (via `kupu.record_event` if available).
 2. If the action contains a `followup` (it usually does, unless the destination is `user`), execute that followup as if it were a top-level action.
 3. If the destination is `user`, treat this as a `surface_to_user` action: pause and surface to the user.
 

@@ -259,6 +259,38 @@ new_status: current | superseded | stale | complete
 reason: <short explanation>
 ```
 
+When Kupu's Phase 6 tools are available, the dispatcher executes `mark_status` via the appropriate Kupu call:
+- `new_status: current` for an implementation → `kupu.promote_implementation(node_id, version)`
+- `new_status: stale` for a subtree root → `kupu.mark_subtree_stale(root_node_id, reason)`
+- Other status transitions on handoffs → `kupu.update_handoff_status(handoff_id, new_status, payload?)`
+
+When Kupu's Phase 6 tools are not available, the dispatcher edits `tree/current.yaml` and the relevant meta.yaml files directly per `references/state-layout.md`.
+
+#### `write_artefact`
+
+Write a versioned artefact (brief, design doc, vocabulary, contract, project_context). Replaces previously-implicit "the dispatcher writes this file" behaviour with an explicit action.
+
+```yaml
+action: write_artefact
+artefact:
+  kind: brief | design | vocabulary | contract | project_context
+  module: <module-name>   # only for kind: contract
+  parent_version: <integer>   # for design (parent brief), contract (parent design), if applicable
+  content: |
+    <full Markdown / YAML content of the artefact>
+```
+
+When Kupu's Phase 5 tools are available, the dispatcher executes `write_artefact` via the appropriate Kupu call:
+- `kind: brief` → `kupu.write_brief(content, source?)`
+- `kind: design` → `kupu.write_design(content, parent_brief_version?)`
+- `kind: vocabulary` → `kupu.write_vocabulary(entries)` (entries parsed from content)
+- `kind: contract` → `kupu.write_contract(module, content, parent_design_version?)`
+- `kind: project_context` → `kupu.write_project_context(content)`
+
+Phase 5 writes are append-only with server-computed contiguous version numbers — the orchestrator does not specify the new version number. The atomic 4-way bundle (file + family meta.yaml + project.yaml current pointer + emitted event) is enforced by Kupu when its tools are present; the bash fallback path requires the dispatcher to perform the equivalent updates manually.
+
+When Kupu's Phase 5 tools are not available, the dispatcher writes the file at the canonical path (`brief/v<N+1>.md`, `design/v<N+1>.md`, etc.), updates the family meta.yaml's current_version, updates project.yaml's current pointer, and emits the appropriate event — all in sequence, with verify-after-write per `references/state-layout.md`.
+
 #### `record_decision`
 
 Write a decision record. Always emitted alongside other actions when a non-trivial choice is made.
@@ -414,6 +446,10 @@ Read `tree/current.yaml`. Walk it depth-first. For each node, in this order of p
 5. **A node that is `current` and verified:** skip it; that subtree is done.
 
 If you walked the entire tree and found nothing to dispatch: the build is either complete (emit `complete`) or there are open re-raises blocking progress (handle those instead).
+
+**When Kupu's Phase 6 tools are available**, prefer `kupu.next_dispatchable_node()` over reading `tree/current.yaml` directly and walking it yourself. The Kupu call returns the structural facts — the list of unblocked nodes, in tree-traversal order — without applying Taniwha discipline. The orchestrator still applies the precedence ordering above (leaves before compositions, implementation before verifier, etc.) on the returned set. `next_dispatchable_node` is a structural query; the orchestrator's selection logic is the discipline layer on top.
+
+If `kupu.next_dispatchable_node()` returns an empty list and `tree/current.yaml` is non-trivial, the build is structurally complete or fully blocked — same conclusion as the manual walk.
 
 **Mandatory rules during the building phase, restating the hard rules at this layer:**
 - If the design has more than one module, the tree must include composition nodes that wire them together. If `tree/current.yaml` has only leaf nodes for a multi-module design, the tree itself is wrong — emit a `surface_to_user` with `prompt_kind: scope_clarification` flagging this, do not proceed to mark the build complete.

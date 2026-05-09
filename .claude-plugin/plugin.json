@@ -1,7 +1,7 @@
 {
   "name": "taniwha",
-  "version": "3.0.0",
-  "description": "Compartmentalised, agent-driven build system for AI-generated codebases. Imposes structure that holds as projects grow, with verifier-checked contracts, a re-raise loop that surfaces under-specification before code is written, language-agnostic toolchain capture, and a contract-amendment fast-path. Uses Kupu's MCP backend when installed for atomic state operations, lighter agent context, and dispatch metrics; falls back to bash scripts when not. Phase-aware detection means any Kupu phase installation works seamlessly. v3.0 adds dispatch-metrics integration (host-agnostic), orchestrator state-reading via Kupu read tools, and round-trip discipline strengthening for paired write/read families.",
+  "version": "4.0.0",
+  "description": "Compartmentalised, agent-driven build system for AI-generated codebases. Imposes structure that holds as projects grow, with verifier-checked contracts, a re-raise loop that surfaces under-specification before code is written, language-agnostic toolchain capture, and a contract-amendment fast-path. Uses Kupu's MCP backend when installed for atomic state operations, lighter agent context, full tree operations, artefact CRUD writes, structural validation, and dispatch metrics; falls back to bash scripts when not. Phase-aware detection means any Kupu phase installation (1-7) works seamlessly. v4.0 wires Phase 4-7 of Kupu (metrics, artefact writes, tree operations, validation) into the skills' action surface.",
   "author": {
     "name": "Taniwha"
   },

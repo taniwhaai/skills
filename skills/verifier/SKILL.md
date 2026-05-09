@@ -36,6 +36,10 @@ Before opening any source file, read the contract end to end and pay particular 
 
 This step matters because once you read the source code, your interpretation of the contract becomes anchored to what the implementor did. Reading the contract first means your acceptance-criteria reading is independent.
 
+**When Kupu's Phase 7 tools are available**, you can use `kupu.validate_contract(module, version?)` to perform structural validation of the contract before verifying its implementation. The tool returns a `ValidationResult` with structural findings (missing required sections, empty AC bodies, duplicate AC identifiers, etc.). This is not a substitute for reading the contract — you still must understand the ACs to write tests against them — but it is a cheap pre-check that catches structural defects before you invest in test design. Similarly, `kupu.validate_vocabulary(version?)` validates the shared vocabulary's structure.
+
+If `validate_contract` returns findings, those findings should appear in your verifier report's `findings` section. Structural defects in the contract are not implementation bugs but they are real issues for the verifier to surface.
+
 ### 2. Read the source files
 
 Now read the implementation. Do not start writing tests until you've read enough of the source to understand its public surface — the entry points the contract describes.
