@@ -1,0 +1,11 @@
+name: skills
+repo: taniwhaai/skills
+role: A discipline for AI-generated codebases — verifier-checked contracts + re-raise loop
+layer: tooling
+language: shell
+status: maintenance
+upstream: []
+downstream: []
+notes: >
+  Provisional classification (confirm/sharpen later). Imposes structure that holds
+  as AI-generated projects grow; surfaces under-specification before code is written.
